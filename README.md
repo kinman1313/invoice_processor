@@ -7,9 +7,11 @@
 ### What It Does
 
 - **Extracts** invoice data: vendor, amount, date, PO number, line items
+- **Supports** multiple formats: PDF, Images (JPG/PNG), and Word Documents (DOCX/DOC)
 - **Validates** against business rules: vendor database, PO verification, amount matching
 - **Flags anomalies**: missing data, discrepancies, unusual amounts
 - **Provides confidence scores**: high/medium/low for each extracted field
+- **Integrates with QuickBooks**: One-click export of bills to QuickBooks Online
 - **Generates audit trails**: full reasoning for every decision
 - **Outputs structured JSON**: ready for downstream system integration
 
@@ -36,6 +38,12 @@ cd invoice_processor
 
 ```bash
 pip install -r requirements.txt
+
+# IMPORTANT: Poppler is required for PDF processing.
+# Windows: Download from https://github.com/oschwartz10612/poppler-windows/releases/
+#          Add 'bin' folder to System PATH.
+# Mac: brew install poppler
+# Linux: sudo apt-get install poppler-utils
 ```
 
 ### 3. Configure API Key
@@ -44,8 +52,12 @@ pip install -r requirements.txt
 # Copy the example file
 cp .env.example .env
 
-# Edit .env and add your Anthropic API key
+# Edit .env and add your keys
 # ANTHROPIC_API_KEY=sk-ant-...
+# (Optional) QuickBooks Keys for pre-filling the UI
+# AB_CLIENT_ID=...
+# AB_CLIENT_SECRET=...
+# AB_REDIRECT_URI=http://localhost:8501
 ```
 
 Get your API key from: https://console.anthropic.com/
@@ -66,7 +78,8 @@ This creates 5 test invoices in `sample_invoices/` with different scenarios.
 streamlit run app.py
 ```
 
-Then open http://localhost:8501 in your browser
+Then open http://localhost:8501 in your browser.
+The new **InvoiceAI Enterprise** interface features a split-screen view for efficient document review.
 
 **Option B: Command Line**
 

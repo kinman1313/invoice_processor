@@ -21,6 +21,12 @@ try:
 except ImportError:
     PDF_SUPPORT = False
 
+try:
+    import docx
+    DOCX_SUPPORT = True
+except ImportError:
+    DOCX_SUPPORT = False
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -224,6 +230,18 @@ def convert_pdf_to_image(pdf_path: str) -> str:
     return temp_path
 
 
+def read_docx_text(file_path: str) -> str:
+    """Extract text from a Word document"""
+    if not DOCX_SUPPORT:
+        raise ImportError("python-docx not installed. Install with: pip install python-docx")
+    
+    doc = docx.Document(file_path)
+    full_text = []
+    for para in doc.paragraphs:
+        full_text.append(para.text)
+    return '\n'.join(full_text)
+
+
 def prepare_invoice_image(file_path: str) -> Tuple[str, bool]:
     """
     Prepare invoice file for processing, converting PDF to image if needed
@@ -237,6 +255,11 @@ def prepare_invoice_image(file_path: str) -> Tuple[str, bool]:
         return image_path, True  # Mark as temporary
     else:
         return file_path, False  # Use as-is
+    
+def is_word_document(file_path: str) -> bool:
+    """Check if file is a Word document"""
+    ext = Path(file_path).suffix.lower()
+    return ext in ['.docx', '.doc']
 
 
 def process_invoice(image_path: str) -> dict:
@@ -252,20 +275,52 @@ def process_invoice(image_path: str) -> dict:
             "error": f"File not found: {image_path}"
         }
     
-    # Convert PDF to image if needed
-    try:
-        actual_image_path, is_temp = prepare_invoice_image(image_path)
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"Failed to process file: {str(e)}"
-        }
+    # Prepare content for Claude
+    content = []
+    is_temp = False
+    actual_path = image_path
     
     try:
-        # Encode image
-        image_data = encode_image_to_base64(actual_image_path)
-        media_type = get_image_media_type(actual_image_path)
-        
+        if is_word_document(image_path):
+            # Text-based processing for Word docs
+            invoice_text = read_docx_text(image_path)
+            content = [
+                {
+                    "type": "text",
+                    "text": f"Please process this invoice text:\n\n{invoice_text}\n\n1. Extract: vendor name, invoice number, date, total amount, line items\n2. If there's a PO number, validate it\n3. Check if the vendor exists in our database\n4. Flag any anomalies or issues you notice\n5. Provide confidence scores (high/medium/low) for each key field\n\nAfter validation, provide the final result as structured JSON."
+                }
+            ]
+        else:
+            # Image-based processing
+            actual_path, is_temp = prepare_invoice_image(image_path)
+            
+            # Encode image
+            image_data = encode_image_to_base64(actual_path)
+            media_type = get_image_media_type(actual_path)
+            
+            content = [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": image_data
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": """Please process this invoice. Extract all key information and validate it:
+                        
+1. Extract: vendor name, invoice number, date, total amount, line items (if visible)
+2. If there's a PO number, validate it
+3. Check if the vendor exists in our database
+4. Flag any anomalies or issues you notice
+5. Provide confidence scores (high/medium/low) for each key field
+
+After validation, provide the final result as structured JSON."""
+                }
+            ]
+
         # Define tools
         tools = [
             {
@@ -348,28 +403,7 @@ Flag anything unusual for human review."""
         messages = [
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": image_data
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": """Please process this invoice. Extract all key information and validate it:
-                        
-1. Extract: vendor name, invoice number, date, total amount, line items (if visible)
-2. If there's a PO number, validate it
-3. Check if the vendor exists in our database
-4. Flag any anomalies or issues you notice
-5. Provide confidence scores (high/medium/low) for each key field
-
-After validation, provide the final result as structured JSON."""
-                    }
-                ]
+                "content": content
             }
         ]
         
@@ -463,11 +497,16 @@ After validation, provide the final result as structured JSON."""
         
         return final_result
         
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"An unexpected error occurred: {str(e)}"
+        }
     finally:
         # Clean up temporary file if it was created
-        if is_temp:
+        if is_temp and actual_path:
             try:
-                Path(actual_image_path).unlink()
+                Path(actual_path).unlink()
             except Exception:
                 pass
 
