@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Invoice Processing Agent** is an agentic AI system built with Claude that automatically extracts, validates, and processes invoices. It demonstrates enterprise-ready AI capabilities for regulated industries like finance.
+**Invoice Processing Agent** is an agentic AI system automatically extracts, validates, and processes invoices. It demonstrates enterprise-ready AI capabilities for regulated industries like finance.
 
 ### What It Does
 
@@ -60,7 +60,7 @@ cp .env.example .env
 # AB_REDIRECT_URI=http://localhost:8501
 ```
 
-Get your API key from: https://console.anthropic.com/
+Get your API key from: <https://console.anthropic.com/>
 
 ### 4. Generate Sample Invoices
 
@@ -78,7 +78,7 @@ This creates 5 test invoices in `sample_invoices/` with different scenarios.
 streamlit run app.py
 ```
 
-Then open http://localhost:8501 in your browser.
+Then open <http://localhost:8501> in your browser.
 The new **InvoiceAI Enterprise** interface features a split-screen view for efficient document review.
 
 **Option B: Command Line**
@@ -200,29 +200,34 @@ python invoice_agent.py invoice.pdf | jq .extracted_data
 ## Sample Invoices
 
 ### 1. **invoice_clean.pdf** ✅
+
 - Scenario: Standard, well-formatted invoice
 - Vendor: ACME Corp (in database)
 - PO: PO-2024-001 (matches, amount correct)
 - **Expected**: All validations pass, high confidence
 
 ### 2. **invoice_missing_data.pdf** ⚠️
+
 - Scenario: Missing PO number
 - Vendor: Tech Solutions Inc
 - PO: None
 - **Expected**: Flagged for missing PO, needs review
 
 ### 3. **invoice_amount_mismatch.pdf** 🚩
+
 - Scenario: Amount exceeds PO tolerance
 - Vendor: Office Depot
 - Amount: $3000 (PO expected $2500 ±10%)
 - **Expected**: Flagged for amount variance, needs approval
 
 ### 4. **invoice_unknown_vendor.pdf** 🔄
+
 - Scenario: Vendor not in database
 - Vendor: Random Vendor LLC
 - **Expected**: Flagged as unknown vendor, needs verification
 
 ### 5. **invoice_complex.pdf** 📊
+
 - Scenario: Multi-line cloud services invoice
 - Vendor: AWS (in database)
 - PO: PO-2024-004 (matches)
@@ -333,12 +338,14 @@ accounting_system.create_invoice(
 ## Enterprise Roadmap
 
 ### Phase 1: MVP (This Demo) ✅
+
 - Core extraction and validation
 - Web UI for manual review
 - JSON output format
 - Sample test invoices
 
 ### Phase 2: Integration (Week 2-3)
+
 - Real ERP connectors (SAP, Oracle, NetSuite)
 - Database integration (Vendor master, PO database)
 - Approval workflow automation
@@ -346,6 +353,7 @@ accounting_system.create_invoice(
 - Batch processing (1000s of invoices)
 
 ### Phase 3: Advanced (Week 4-6)
+
 - Multi-currency support
 - OCR for handwritten amounts
 - Duplicate detection
@@ -353,6 +361,7 @@ accounting_system.create_invoice(
 - Machine learning for confidence scoring
 
 ### Phase 4: Compliance (Week 6-8)
+
 - Full audit logging
 - GDPR/HIPAA compliance
 - SOC 2 certification
@@ -395,7 +404,8 @@ streamlit run app.py --server.port 8501
 ### Claude API errors
 
 Check:
-1. API key is valid (https://console.anthropic.com/)
+
+1. API key is valid (<https://console.anthropic.com/>)
 2. API key has permissions (test at console)
 3. Rate limits (usually 100 req/min for free tier)
 4. Network connectivity
@@ -436,15 +446,15 @@ Check:
 
 ## Support & Questions
 
-- **Anthropic Docs**: https://docs.claude.com
-- **API Status**: https://status.anthropic.com
+- **Anthropic Docs**: <https://docs.claude.com>
+- **API Status**: <https://status.anthropic.com>
 - **GitHub Issues**: Create an issue with details
 
 ---
 
 ## License
 
-Built by Zillion Technologies | Built with Claude | 7-Day Demo
+Built by Zillion Technologies
 
 ---
 

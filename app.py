@@ -147,7 +147,7 @@ with st.sidebar:
     
     st.markdown("### ℹ️ About")
     st.caption("Enterprise InvoiceAI v2.0")
-    st.caption("Powered by Claude 3.5 Sonnet")
+    st.caption("Zillion Technologies")
 
 
 # -----------------------------------------------------------------------------

@@ -16,7 +16,7 @@ python generate_samples.py
 streamlit run app.py
 ```
 
-Open http://localhost:8501 in your browser.
+Open <http://localhost:8501> in your browser.
 
 ## File Structure
 
@@ -38,22 +38,26 @@ invoice_processor/
 ## What Each Component Does
 
 ### invoice_agent.py
+
 - Uses Claude with vision to extract invoice data
 - Runs validation tools (vendor check, PO verification)
 - Returns structured JSON with confidence scores
 
 ### app.py
+
 - Beautiful Streamlit web interface
 - Upload invoices, view results in tabs
 - Download JSON for integration
 
 ### config.py
+
 - 15 sample vendors
 - 4 sample POs
 - Customizable validation rules
 - Approval workflow routing
 
 ### generate_samples.py
+
 - Creates 5 realistic test invoices
 - Different scenarios: clean, missing data, mismatches, etc.
 - All in PDF format (realistic)
@@ -82,6 +86,7 @@ Output: Formatted JSON to stdout
 ## Expected Results
 
 ### Clean Invoice (invoice_clean.pdf)
+
 - ✅ Vendor valid
 - ✅ PO valid
 - ✅ Amount matches
@@ -89,12 +94,14 @@ Output: Formatted JSON to stdout
 - 📊 Confidence: High across all fields
 
 ### Missing Data (invoice_missing_data.pdf)
+
 - ✅ Vendor valid
 - ⚠️ PO missing
 - 📊 Confidence: Medium on vendor, Low on PO
 - 🚩 Flagged for review
 
 ### Amount Mismatch (invoice_amount_mismatch.pdf)
+
 - ✅ Vendor valid
 - ⚠️ PO valid but amount mismatches
 - 🚩 High severity anomaly
@@ -149,6 +156,7 @@ Edit `config.py` → `VALIDATION_RULES`:
 ## Troubleshooting
 
 ### "API key not found"
+
 ```bash
 # Check if set
 echo $ANTHROPIC_API_KEY
@@ -158,6 +166,7 @@ export ANTHROPIC_API_KEY=sk-ant-xxxxx
 ```
 
 ### "File not found"
+
 ```bash
 # Generate samples first
 python generate_samples.py
@@ -167,6 +176,7 @@ ls sample_invoices/
 ```
 
 ### "Module not found"
+
 ```bash
 # Install dependencies
 pip install -r requirements.txt
@@ -176,6 +186,7 @@ pip install anthropic streamlit
 ```
 
 ### Slow Processing
+
 - First request takes longer (model loading)
 - Subsequent requests should be 2-3 seconds
 - If consistently slow, check network/API
