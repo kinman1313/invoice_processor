@@ -14,6 +14,7 @@ class Vendor(Base):
     aliases = Column(JSON, default=[]) # List of auto-detected names
     category = Column(String)
     address = Column(String, nullable=True)
+    default_payment_terms = Column(String, nullable=True) # e.g. "Net 30"
     
     purchase_orders = relationship("PurchaseOrder", back_populates="vendor")
     invoices = relationship("Invoice", back_populates="vendor")
@@ -29,6 +30,20 @@ class PurchaseOrder(Base):
     status = Column(String, default="active") # active, closed
     
     vendor = relationship("Vendor", back_populates="purchase_orders")
+    receipts = relationship("GoodsReceipt", back_populates="purchase_order")
+
+class GoodsReceipt(Base):
+    __tablename__ = "goods_receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    po_id = Column(Integer, ForeignKey("purchase_orders.id"))
+    receipt_number = Column(String, unique=True, index=True)
+    received_date = Column(String) # ISO Format YYYY-MM-DD
+    quantity = Column(Float, nullable=True)
+    amount = Column(Float) # Value of goods received
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    purchase_order = relationship("PurchaseOrder", back_populates="receipts")
 
 class Invoice(Base):
     __tablename__ = "invoices"
@@ -40,6 +55,14 @@ class Invoice(Base):
     total_amount = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="processed") # processed, flagged, approved
+    
+    # Payment Optimization Fields
+    payment_terms = Column(String, nullable=True)
+    due_date = Column(String, nullable=True)
+    discount_date = Column(String, nullable=True)
+    optimal_payment_date = Column(String, nullable=True)
+    potential_savings = Column(Float, default=0.0)
+    
     extracted_data = Column(JSON) # Full raw JSON result
     
     vendor = relationship("Vendor", back_populates="invoices")

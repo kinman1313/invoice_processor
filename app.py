@@ -217,7 +217,7 @@ with st.sidebar:
     
     page = st.radio(
         "Go to",
-        ["Dashboard", "Vendors", "Purchase Orders", "History", "Analytics"],
+        ["Dashboard", "Vendors", "Purchase Orders", "Optimization", "History", "Analytics"],
         index=0,
         label_visibility="collapsed"
     )
@@ -265,6 +265,10 @@ if page == "Vendors":
 elif page == "Purchase Orders":
     from pages_ui.pos import render_pos_page
     render_pos_page()
+
+elif page == "Optimization":
+    from pages_ui.optimization import render_optimization_page
+    render_optimization_page()
 
 elif page == "History":
     from pages_ui.history import render_history_page

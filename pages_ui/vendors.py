@@ -18,6 +18,12 @@ def render_vendors_page():
                 v_cat = col1.selectbox("Category", ["supplies", "software", "hardware", "utilities", "services", "other"])
                 v_addr = col2.text_input("Address (Optional)")
                 
+                v_terms = col1.text_input(
+                    "Default Terms", 
+                    placeholder="e.g. 'Net 30', '2/10 Net 30'",
+                    help="Standard payment terms for this vendor. Used for optimization if not found on invoice."
+                )
+                
                 submitted = st.form_submit_button("Create Vendor")
                 if submitted:
                     if v_name and v_id:
@@ -29,7 +35,8 @@ def render_vendors_page():
                                 vendor_id=v_id,
                                 name=v_name,
                                 category=v_cat,
-                                address=v_addr
+                                address=v_addr,
+                                default_payment_terms=v_terms
                             )
                             db.add(new_vendor)
                             db.commit()

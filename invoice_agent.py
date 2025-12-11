@@ -7,8 +7,9 @@ Supports PDF files by converting them to images
 import anthropic
 import base64
 import json
+import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Tuple
 import mimetypes
@@ -41,7 +42,7 @@ DEFAULT_MODEL = os.getenv('INVOICE_MODEL', 'claude-opus-4-1-20250805')
 MAX_TOKENS = int(os.getenv('MAX_TOKENS', '2048'))
 
 from database import SessionLocal
-from models import Vendor, PurchaseOrder, Invoice, InvoiceLine
+from models import Vendor, PurchaseOrder, Invoice, InvoiceLine, GoodsReceipt
 from sqlalchemy import or_
 
 
@@ -83,8 +84,11 @@ def validate_vendor(vendor_name: str) -> dict:
         db.close()
 
 
-def check_po(po_number: str, vendor_name: str, invoice_amount: float) -> dict:
-    """Validate PO number and check amount"""
+def perform_3_way_match(po_number: str, vendor_name: str, invoice_amount: float) -> dict:
+    """
+    Perform 2-way and 3-way matching validation.
+    Returns validation status and match details.
+    """
     
     if not po_number:
         return {
@@ -106,15 +110,12 @@ def check_po(po_number: str, vendor_name: str, invoice_amount: float) -> dict:
                 "po_found": False
             }
         
-        # Check vendor match
-        # We need to get the linked vendor name
+        # 1. Vendor Match
         po_vendor = po_obj.vendor
-        
         vendor_match = False
         if po_vendor:
             v_name_db = po_vendor.name.lower()
             v_name_inv = vendor_name.lower()
-            # Simple containment check
             if v_name_db in v_name_inv or v_name_inv in v_name_db:
                 vendor_match = True
         
@@ -123,33 +124,66 @@ def check_po(po_number: str, vendor_name: str, invoice_amount: float) -> dict:
                 "valid": False,
                 "message": f"Vendor mismatch: Invoice from '{vendor_name}' but PO is for '{po_vendor.name if po_vendor else 'Unknown'}'",
                 "po_found": True,
-                "vendor_match": False
+                "match_type": "failed_vendor"
             }
         
-        # Check amount tolerance
+        # 2. Amount Validation (2-Way)
         expected = po_obj.expected_amount
         tolerance = po_obj.tolerance
         tolerance_amount = expected * tolerance
         
+        amount_check = True
         if invoice_amount < expected - tolerance_amount or invoice_amount > expected + tolerance_amount:
-            return {
-                "valid": False,
-                "message": f"Amount mismatch: Invoice ${invoice_amount} exceeds PO tolerance (expected ${expected} ±${tolerance_amount})",
-                "po_found": True,
-                "vendor_match": True,
-                "amount_in_tolerance": False,
-                "expected_amount": expected,
-                "tolerance_percentage": tolerance * 100
-            }
+            amount_check = False
+            
+        # 3. Goods Receipt Validation (3-Way)
+        receipts = po_obj.receipts
+        total_received = sum(r.amount for r in receipts)
         
-        return {
-            "valid": True,
-            "message": f"PO '{po_number}' validated successfully",
+        has_receipts = len(receipts) > 0
+        receipt_match = False
+        
+        # Logic: Invoice should not exceed Received Amount + Tolerance
+        # Or if no receipts, flag it.
+        if has_receipts:
+            if invoice_amount <= total_received * (1.0 + tolerance):
+                receipt_match = True
+            else:
+                receipt_match = False
+        
+        # Construct Result
+        result = {
             "po_found": True,
             "vendor_match": True,
-            "amount_in_tolerance": True,
-            "expected_amount": expected
+            "expected_po_amount": expected,
+            "total_goods_received": total_received,
+            "has_receipts": has_receipts,
+            "2_way_match": amount_check,
+            "3_way_match": receipt_match if has_receipts else "skipped"
         }
+        
+        if not amount_check:
+            result["valid"] = False
+            result["message"] = f"2-Way Match Candidate Failed: Invoice ${invoice_amount} vs PO ${expected}"
+            result["match_type"] = "2_way_failure"
+            
+        elif has_receipts and not receipt_match:
+            result["valid"] = False
+            result["message"] = f"3-Way Match Failed: Invoice ${invoice_amount} exceeds Goods Received ${total_received}"
+            result["match_type"] = "3_way_failure"
+            
+        elif not has_receipts:
+             # Weak Validation if no receipts yet
+            result["valid"] = True
+            result["message"] = f"2-Way Match Passed (Note: No Goods Receipts found for 3-way check)"
+            result["match_type"] = "2_way_success"
+            
+        else:
+            result["valid"] = True
+            result["message"] = f"3-Way Match Successful! (Invoice matches PO and Goods Receipts)"
+            result["match_type"] = "3_way_success"
+            
+        return result
             
     finally:
         db.close()
@@ -167,13 +201,130 @@ def flag_anomaly(anomaly_type: str, description: str, severity: str = "medium") 
     }
 
 
+def calculate_optimal_payment(terms: str, invoice_date_str: str, amount: float) -> dict:
+    """
+    Calculate due date and optimal payment date based on terms.
+    """
+    try:
+        inv_date = datetime.strptime(invoice_date_str, "%Y-%m-%d")
+    except:
+        return {
+            "error": "Invalid date format. Use YYYY-MM-DD"
+        }
+    
+    terms = terms.lower().strip()
+    result = {
+        "payment_terms": terms,
+        "invoice_date": invoice_date_str,
+        "due_date": None,
+        "discount_date": None,
+        "optimal_payment_date": None,
+        "potential_savings": 0.0,
+        "reasoning": "Standard Net Terms"
+    }
+    
+    # 1. Parse "2/10 Net 30" style
+    # Regex for "X/Y Net Z" or "X/Y, Net Z"
+    match = re.search(r'(\d+(?:\.\d+)?)%?\/(\d+)\s*,?\s*net\s*(\d+)', terms)
+    
+    if match:
+        discount_percent = float(match.group(1)) / 100.0
+        discount_days = int(match.group(2))
+        net_days = int(match.group(3))
+        
+        discount_date = inv_date + timedelta(days=discount_days)
+        due_date = inv_date + timedelta(days=net_days)
+        
+        savings = amount * discount_percent
+        
+        # APR Calculation: Rate / (1 - Rate) * (365 / (NetDays - DiscDays))
+        days_diff = net_days - discount_days
+        if days_diff > 0:
+            apr = (discount_percent / (1 - discount_percent)) * (365 / days_diff)
+            
+            # Hurdle Rate (e.g., 10% annual cost of capital)
+            hurdle_rate = 0.10
+            
+            if apr > hurdle_rate:
+                result["optimal_payment_date"] = discount_date.strftime("%Y-%m-%d")
+                result["potential_savings"] = savings
+                result["reasoning"] = f"Pay early to capture {discount_percent*100}% discount. APR {apr*100:.1f}% > 10% Hurdle."
+            else:
+                result["optimal_payment_date"] = due_date.strftime("%Y-%m-%d")
+                result["reasoning"] = f"Pay on due date. Discount APR {apr*100:.1f}% is below hurdle rate."
+        else:
+             result["optimal_payment_date"] = due_date.strftime("%Y-%m-%d")
+             
+        result["due_date"] = due_date.strftime("%Y-%m-%d")
+        result["discount_date"] = discount_date.strftime("%Y-%m-%d")
+        
+    # 2. Parse "Net 30" style
+    elif "net" in terms:
+        match_net = re.search(r'net\s*(\d+)', terms)
+        if match_net:
+            days = int(match_net.group(1))
+            due_date = inv_date + timedelta(days=days)
+            result["due_date"] = due_date.strftime("%Y-%m-%d")
+            result["optimal_payment_date"] = due_date.strftime("%Y-%m-%d")
+            result["reasoning"] = f"Standard Net {days} terms. Pay on due date."
+            
+    # Default fallback
+    if not result["due_date"]:
+         # Default to Net 30 if parsed terms failed but date exists
+         due_date = inv_date + timedelta(days=30)
+         result["due_date"] = due_date.strftime("%Y-%m-%d")
+         result["optimal_payment_date"] = due_date.strftime("%Y-%m-%d")
+         result["reasoning"] = "Could not parse terms, defaulting to Net 30"
+
+    return result
+
+
+def resolve_discrepancy(discrepancy_type: str, details: str, recommended_action: str) -> dict:
+    """
+    Autonomously resolve or outreach for a discrepancy.
+    Simulates sending emails or auto-correcting based on confidence.
+    """
+    
+    # 1. Outreach Logic (Simulation)
+    if "outreach" in recommended_action.lower() or "email" in recommended_action.lower():
+        return {
+            "resolution_status": "outreach_sent",
+            "action_taken": "Sent automated email to vendor/internal team",
+            "details": f"Outreach triggered for {discrepancy_type}. Content: {details}",
+            "auto_resolved": False
+        }
+        
+    # 2. Auto-Correction Logic
+    elif "correct" in recommended_action.lower() or "accept" in recommended_action.lower():
+         return {
+            "resolution_status": "auto_corrected",
+            "action_taken": "System applied auto-correction within tolerance",
+            "details": details,
+            "auto_resolved": True
+        }
+        
+    else:
+        return {
+            "resolution_status": "flagged_for_human",
+            "action_taken": "Escalated to human review queue",
+            "details": details,
+            "auto_resolved": False
+        }
+
+
 def execute_tool(tool_name: str, tool_input: dict) -> str:
     """Execute a tool and return result as JSON string"""
     
     if tool_name == "validate_vendor":
         result = validate_vendor(tool_input.get("vendor_name", ""))
-    elif tool_name == "check_po":
-        result = check_po(
+    elif tool_name == "perform_3_way_match":
+        result = perform_3_way_match(
+            tool_input.get("po_number", ""),
+            tool_input.get("vendor_name", ""),
+            float(tool_input.get("invoice_amount", 0))
+        )
+    elif tool_name == "check_po": # Backwards compatibility / alias
+        result = perform_3_way_match(
             tool_input.get("po_number", ""),
             tool_input.get("vendor_name", ""),
             float(tool_input.get("invoice_amount", 0))
@@ -183,6 +334,12 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             tool_input.get("anomaly_type", "unknown"),
             tool_input.get("description", ""),
             tool_input.get("severity", "medium")
+        )
+    elif tool_name == "resolve_discrepancy":
+        result = resolve_discrepancy(
+            tool_input.get("discrepancy_type", ""),
+            tool_input.get("details", ""),
+            tool_input.get("recommended_action", "")
         )
     else:
         result = {"error": f"Unknown tool: {tool_name}"}
@@ -335,8 +492,8 @@ After validation, provide the final result as structured JSON."""
                 }
             },
             {
-                "name": "check_po",
-                "description": "Validate a PO number and check invoice amount against expected amount",
+                "name": "perform_3_way_match",
+                "description": "Validate PO number, check invoice amount vs PO amount (2-way), and check invoice vs goods receipts (3-way).",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -378,23 +535,68 @@ After validation, provide the final result as structured JSON."""
                     },
                     "required": ["anomaly_type", "description"]
                 }
+            },
+            {
+                "name": "resolve_discrepancy",
+                "description": "Attempt to resolve a discrepancy via autonomous outreach or auto-correction.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "discrepancy_type": {
+                            "type": "string",
+                            "description": "The type of issue (e.g. '3_way_failure', 'vendor_not_found')"
+                        },
+                        "details": {
+                            "type": "string",
+                            "description": "Context about the discrepancy"
+                        },
+                        "recommended_action": {
+                            "type": "string",
+                            "description": "Action to take: 'outreach_vendor', 'email_purchasing', 'auto_correct', 'escalate'"
+                        }
+                    },
+                    "required": ["discrepancy_type", "details", "recommended_action"]
+                }
+            },
+            {
+                "name": "optimize_payment",
+                "description": "Calculate the optimal payment date based on payment terms (e.g. 2/10 Net 30) and invoice details.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "payment_terms": {
+                            "type": "string",
+                            "description": "Payment terms string (e.g. 'Net 30', '2/10 Net 30')"
+                        },
+                        "invoice_date": {
+                            "type": "string",
+                            "description": "Invoice date in YYYY-MM-DD format"
+                        },
+                        "invoice_amount": {
+                            "type": "number",
+                            "description": "Total invoice amount"
+                        }
+                    },
+                    "required": ["payment_terms", "invoice_date", "invoice_amount"]
+                }
             }
         ]
         
         # Initial system prompt
-        system_prompt = """You are an expert invoice processing agent. Your job is to:
+        system_prompt = """You are an expert Autonomous Invoice Processing Agent. Your job is to:
 
-1. Extract key invoice information: vendor name, invoice number, date, total amount, line items, and PO number
-2. Validate the data by:
-   - Checking if the vendor exists in our database
-   - Validating PO numbers if present
-   - Flagging any anomalies or issues
-3. Provide confidence scores for extracted fields
-4. Output structured JSON with all extracted data and validation results
+1. Extract key invoice information: vendor, invoice #, date, amount, line items, PO #.
+2. **Extract Payment Terms**: Look for "Net 30", "2/10", etc.
+3. Validate using available tools:
+   - `validate_vendor`
+   - `perform_3_way_match`
+4. **Optimize Payment**: 
+   - Use `optimize_payment` tool if payment terms are found.
+   - This helps us decide when to pay to capture discounts.
+5. Handle Discrepancies recursively.
+6. Output structured JSON.
 
-Be thorough but efficient. Ask clarification questions if data is ambiguous or missing.
-Always validate critical fields before proceeding.
-Flag anything unusual for human review."""
+Always try to find the "Optimal Payment Date"."""
 
         # Initial message to Claude
         messages = [
@@ -533,6 +735,14 @@ def save_invoice_to_db(data: dict) -> dict:
             date=extracted.get("invoice_date"),
             total_amount=amt,
             status="processed", # Default status
+            
+            # Payment Opt Fields
+            payment_terms=extracted.get("payment_terms"),
+            due_date=extracted.get("due_date"),
+            discount_date=extracted.get("discount_date"),
+            optimal_payment_date=extracted.get("optimal_payment_date"),
+            potential_savings=float(extracted.get("potential_savings", 0) or 0),
+            
             extracted_data=data
         )
         db.add(new_inv)
