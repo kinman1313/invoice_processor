@@ -40,63 +40,47 @@ client = anthropic.Anthropic(api_key=api_key)
 DEFAULT_MODEL = os.getenv('INVOICE_MODEL', 'claude-opus-4-1-20250805')
 MAX_TOKENS = int(os.getenv('MAX_TOKENS', '2048'))
 
-# Dummy vendor database - in production this would be a real database
-VENDOR_DATABASE = {
-    "acme corp": {"id": "V001", "category": "supplies"},
-    "tech solutions inc": {"id": "V002", "category": "software"},
-    "office depot": {"id": "V003", "category": "supplies"},
-    "aws": {"id": "V004", "category": "cloud services"},
-    "microsoft": {"id": "V005", "category": "software"},
-    "fedex": {"id": "V006", "category": "shipping"},
-    "usps": {"id": "V007", "category": "shipping"},
-    "ups": {"id": "V008", "category": "shipping"},
-    "dell": {"id": "V009", "category": "hardware"},
-    "hp": {"id": "V010", "category": "hardware"},
-    "cisco": {"id": "V011", "category": "networking"},
-    "salesforce": {"id": "V012", "category": "software"},
-    "slack": {"id": "V013", "category": "software"},
-    "stripe": {"id": "V014", "category": "payment processing"},
-    "twilio": {"id": "V015", "category": "communications"},
-}
-
-# PO database - maps PO numbers to expected amounts (with tolerance)
-PO_DATABASE = {
-    "PO-2024-001": {"vendor": "acme corp", "expected_amount": 5000, "tolerance": 0.1},
-    "PO-2024-002": {"vendor": "tech solutions inc", "expected_amount": 15000, "tolerance": 0.1},
-    "PO-2024-003": {"vendor": "office depot", "expected_amount": 2500, "tolerance": 0.1},
-    "PO-2024-004": {"vendor": "aws", "expected_amount": 8500, "tolerance": 0.15},
-}
+from database import SessionLocal
+from models import Vendor, PurchaseOrder
+from sqlalchemy import or_
 
 
 def validate_vendor(vendor_name: str) -> dict:
     """Check if vendor exists in database"""
-    vendor_lower = vendor_name.lower().strip()
-    
-    # Exact match
-    if vendor_lower in VENDOR_DATABASE:
-        return {
-            "valid": True,
-            "vendor_id": VENDOR_DATABASE[vendor_lower]["id"],
-            "category": VENDOR_DATABASE[vendor_lower]["category"],
-            "message": f"Vendor '{vendor_name}' found in database"
-        }
-    
-    # Fuzzy match (check if vendor name contains or is contained in database)
-    for db_vendor in VENDOR_DATABASE.keys():
-        if db_vendor in vendor_lower or vendor_lower in db_vendor:
+    vendor_clean = vendor_name.strip()
+    db = SessionLocal()
+    try:
+        # 1. Exact Name Match (Case Insensitive)
+        vendor = db.query(Vendor).filter(Vendor.name.ilike(vendor_clean)).first()
+        
+        if vendor:
             return {
                 "valid": True,
-                "vendor_id": VENDOR_DATABASE[db_vendor]["id"],
-                "category": VENDOR_DATABASE[db_vendor]["category"],
-                "message": f"Vendor '{vendor_name}' matched to '{db_vendor}' in database (fuzzy match)"
+                "vendor_id": vendor.vendor_id,
+                "category": vendor.category,
+                "message": f"Vendor '{vendor_name}' found in database"
             }
-    
-    return {
-        "valid": False,
-        "vendor_id": None,
-        "category": None,
-        "message": f"Vendor '{vendor_name}' NOT found in database"
-    }
+            
+        # 2. Fuzzy / Containment Search
+        # Check if input contains db name OR db name contains input
+        all_vendors = db.query(Vendor).all()
+        for v in all_vendors:
+            if v.name.lower() in vendor_clean.lower() or vendor_clean.lower() in v.name.lower():
+                 return {
+                    "valid": True,
+                    "vendor_id": v.vendor_id,
+                    "category": v.category,
+                    "message": f"Vendor '{vendor_name}' matched to '{v.name}' in database (fuzzy match)"
+                }
+        
+        return {
+            "valid": False,
+            "vendor_id": None,
+            "category": None,
+            "message": f"Vendor '{vendor_name}' NOT found in database"
+        }
+    finally:
+        db.close()
 
 
 def check_po(po_number: str, vendor_name: str, invoice_amount: float) -> dict:
@@ -109,53 +93,66 @@ def check_po(po_number: str, vendor_name: str, invoice_amount: float) -> dict:
             "po_found": False
         }
     
-    po_upper = po_number.upper().strip()
+    po_clean = po_number.strip()
+    db = SessionLocal()
     
-    if po_upper not in PO_DATABASE:
+    try:
+        po_obj = db.query(PurchaseOrder).filter(PurchaseOrder.po_number.ilike(po_clean)).first()
+        
+        if not po_obj:
+            return {
+                "valid": False,
+                "message": f"PO '{po_number}' not found in database",
+                "po_found": False
+            }
+        
+        # Check vendor match
+        # We need to get the linked vendor name
+        po_vendor = po_obj.vendor
+        
+        vendor_match = False
+        if po_vendor:
+            v_name_db = po_vendor.name.lower()
+            v_name_inv = vendor_name.lower()
+            # Simple containment check
+            if v_name_db in v_name_inv or v_name_inv in v_name_db:
+                vendor_match = True
+        
+        if not vendor_match:
+             return {
+                "valid": False,
+                "message": f"Vendor mismatch: Invoice from '{vendor_name}' but PO is for '{po_vendor.name if po_vendor else 'Unknown'}'",
+                "po_found": True,
+                "vendor_match": False
+            }
+        
+        # Check amount tolerance
+        expected = po_obj.expected_amount
+        tolerance = po_obj.tolerance
+        tolerance_amount = expected * tolerance
+        
+        if invoice_amount < expected - tolerance_amount or invoice_amount > expected + tolerance_amount:
+            return {
+                "valid": False,
+                "message": f"Amount mismatch: Invoice ${invoice_amount} exceeds PO tolerance (expected ${expected} ±${tolerance_amount})",
+                "po_found": True,
+                "vendor_match": True,
+                "amount_in_tolerance": False,
+                "expected_amount": expected,
+                "tolerance_percentage": tolerance * 100
+            }
+        
         return {
-            "valid": False,
-            "message": f"PO '{po_number}' not found in database",
-            "po_found": False
-        }
-    
-    po_info = PO_DATABASE[po_upper]
-    
-    # Check vendor match
-    vendor_lower = vendor_name.lower().strip()
-    po_vendor_lower = po_info["vendor"].lower()
-    
-    if vendor_lower != po_vendor_lower and po_vendor_lower not in vendor_lower and vendor_lower not in po_vendor_lower:
-        return {
-            "valid": False,
-            "message": f"Vendor mismatch: Invoice from '{vendor_name}' but PO is for '{po_info['vendor']}'",
-            "po_found": True,
-            "vendor_match": False
-        }
-    
-    # Check amount tolerance
-    expected = po_info["expected_amount"]
-    tolerance = po_info["tolerance"]
-    tolerance_amount = expected * tolerance
-    
-    if invoice_amount < expected - tolerance_amount or invoice_amount > expected + tolerance_amount:
-        return {
-            "valid": False,
-            "message": f"Amount mismatch: Invoice ${invoice_amount} exceeds PO tolerance (expected ${expected} ±${tolerance_amount})",
+            "valid": True,
+            "message": f"PO '{po_number}' validated successfully",
             "po_found": True,
             "vendor_match": True,
-            "amount_in_tolerance": False,
-            "expected_amount": expected,
-            "tolerance_percentage": tolerance * 100
+            "amount_in_tolerance": True,
+            "expected_amount": expected
         }
-    
-    return {
-        "valid": True,
-        "message": f"PO '{po_number}' validated successfully",
-        "po_found": True,
-        "vendor_match": True,
-        "amount_in_tolerance": True,
-        "expected_amount": expected
-    }
+            
+    finally:
+        db.close()
 
 
 def flag_anomaly(anomaly_type: str, description: str, severity: str = "medium") -> dict:

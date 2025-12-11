@@ -12,6 +12,44 @@ import pandas as pd
 from quickbooks_manager import QuickBooksManager
 import os
 from dotenv import load_dotenv
+from database import engine, SessionLocal, Base
+from models import Vendor, PurchaseOrder
+
+# Initialize DB
+Base.metadata.create_all(bind=engine)
+
+def seed_data():
+    db = SessionLocal()
+    if db.query(Vendor).count() == 0:
+        # Seed Vendors
+        vendors = [
+            Vendor(vendor_id="V001", name="Acme Corp", category="supplies"),
+            Vendor(vendor_id="V002", name="Tech Solutions Inc", category="software"),
+            Vendor(vendor_id="V003", name="Office Depot", category="supplies"),
+            Vendor(vendor_id="V004", name="AWS", category="cloud services"),
+            Vendor(vendor_id="V005", name="Microsoft", category="software"),
+        ]
+        db.add_all(vendors)
+        db.commit()
+            
+        # Seed POs
+        # Need to query vendors to get IDs
+        acme = db.query(Vendor).filter_by(name="Acme Corp").first()
+        tech = db.query(Vendor).filter_by(name="Tech Solutions Inc").first()
+        office = db.query(Vendor).filter_by(name="Office Depot").first()
+        aws = db.query(Vendor).filter_by(name="AWS").first()
+        
+        pos = [
+            PurchaseOrder(po_number="PO-2024-001", vendor_id=acme.id, expected_amount=5000.0, tolerance=0.1),
+            PurchaseOrder(po_number="PO-2024-002", vendor_id=tech.id, expected_amount=15000.0, tolerance=0.1),
+            PurchaseOrder(po_number="PO-2024-003", vendor_id=office.id, expected_amount=2500.0, tolerance=0.1),
+            PurchaseOrder(po_number="PO-2024-004", vendor_id=aws.id, expected_amount=8500.0, tolerance=0.15),
+        ]
+        db.add_all(pos)
+        db.commit()
+    db.close()
+
+seed_data()
 
 load_dotenv()
 
