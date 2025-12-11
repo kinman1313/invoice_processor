@@ -1,132 +1,110 @@
-# Invoice Processing Agent - Enterprise Demo v2.0
+# Invoice Processing Agent - Strategic Intelligence Edition v3.0
 
 ## Overview
 
-**Invoice Processing Agent** is an agentic AI system that currently automates the entire Accounts Payable (AP) lifecycle. It goes beyond simple data extraction to perform autonomous 2-way and 3-way matching, discrepancy resolution, and smart payment optimization.
+**Invoice Processing Agent** is an enterprise-grade AI system that transforms Accounts Payable from a back-office function into a strategic asset.
 
-### What It Does
+It combines **Agentic AI** with **Strategic Intelligence** to automate the entire lifecycle—from zero-click ingestion to ERP export—while providing real-time financial insights via natural language chat.
 
-- **Extracts** data from PDFs, Images, and Word Docs.
-- **Validates** against an internal database of Vendors and Purchase Orders (POs).
-- **Performs 3-Way Matching**: Matches Invoice vs. PO vs. Goods Receipts.
-- **Optimizes Cash Flow**: Analyzes payment terms (e.g., "2/10 Net 30") to recommend the optimal payment date for capturing discounts.
-- **Resolves Discrepancies**: Simulates autonomous outreach to vendors or self-correction for minor tolerance issues.
-- **Visualizes Analytics**: Full spend analytics, invoice history, and optimization dashboards.
+### 🚀 Key Capabilities (v3.0)
 
-### Key Features (New in v2.0)
+#### 1. Zero-Click Automation
 
-✅ **Autonomous 3-Way Matching** - Validates line items against received goods.  
-✅ **Smart Payment Optimizer** - Calculates APR of early payment discounts to maximize savings.  
-✅ **Goods Receipt Management** - UI for warehouse teams to log received inventory.  
-✅ **Self-Correction & Outreach** - Agent can auto-correct small errors or draft vendor emails.  
-✅ **Enhanced UI** - Metrics, tooltips, and dedicated dashboards for Vendors and Optimization.  
+* **Automated Ingestion**: Monitors `inbox/` folder for new files.
+* **Auto-Processing**: Instantly extracts, matches, and validates invoices without human intervention.
+* **Smart Routing**: Moves files to `processed/` or `failed/` automatically.
+
+#### 2. Strategic Intelligence
+
+* **Agentic Spend QA**: A "Chat with Data" interface. Ask questions like *"Who is our top vendor?"* or *"What is our total spend on software?"*.
+* **Smart Payment Optimization**: Calculates APR of early payment terms (e.g., "2/10 Net 30") and recommends optimal payment dates to maximize savings.
+
+#### 3. Advanced Validation
+
+* **3-Way Matching**: Validates `Invoice` vs `PO` vs `Goods Receipt` to prevent overpayment.
+* **Self-Correction**: Autonomously resolves minor discrepancies or drafts vendor outreach emails.
+
+#### 4. Enterprise Integration
+
+* **Multi-ERP Support**: Native connectors for **QuickBooks Online**, **Xero**, and **NetSuite**.
+* **Unified Interface**: Switch between ERPs dynamically in the settings.
+* **Mock Mode**: Test all integrations safely without production credentials.
 
 ---
 
 ## Quick Start (5 minutes)
 
-### 1. Clone/Setup
+### 1. Setup
 
 ```bash
 git clone https://github.com/your-repo/invoice_processor.git
 cd invoice_processor
-```
-
-### 2. Install Dependencies
-
-```bash
 pip install -r requirements.txt
-# Ensure Poppler (for PDF) is installed and in PATH
+# Ensure Poppler (for PDF) is installed
 ```
 
-### 3. Configure API Key
+### 2. Configure Environment
 
-Create a `.env` file:
+Create `.env`:
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
-INVOICE_MODEL=claude-opus-4-1-20250805
+INVOICE_MODEL=claude-3-opus-20240229
+SMTP_SERVER=smtp.gmail.com  # Optional (for outreach)
 ```
 
-### 4. Run the Web App
+### 3. Run the App
 
 ```bash
+# Start the Web UI
 streamlit run app.py
-```
 
-Open <http://localhost:8501>.
+# (Optional) Start the Ingestion Service in a separate terminal
+python ingestion_service.py
+```
 
 ---
 
-## Workflows & Capabilities
+## Feature Deep Dive
 
-### 1. Procurement & Receiving
+### 🧠 Agentic Spend QA (Chat)
 
-- **Create POs**: Use the **Purchase Orders** tab to generate new POs.
-- **Receive Goods**: Log incoming shipments against a PO. This creates `GoodsReceipt` records essential for 3-way matching.
+Located in the **AI Assistant** tab.
+* **Natural Language SQL**: Converts English questions into secure database queries.
+* **Context Aware**: Remembers your previous questions for a conversational experience.
+* **Safety**: Uses a read-only connection to ensure data integrity.
 
-### 2. Autonomous Processing
+### 🔌 ERP Connectors
 
-- **Upload**: Drop an invoice in the **Dashboard**.
-- **Agent Logic**:
-    1. **Extracts** terms and data.
-    2. **Validates** vendor existence.
-    3. **Matches**: Checks if `Invoice Amount == PO Amount` (2-way) and if `Invoice Amount <= Goods Received` (3-way).
-    4. **Optimizes**: Checks for "2/10 Net 30" style terms.
-    5. **Output**: Returns a JSON result with a recommendation (Approve, Pay Early, Flag).
+Integrate with major ERP systems via the **Settings** sidebar.
 
-### 3. Smart Payment Optimization
+**Configuration:**
 
-- The system identifies invoices with Early Payment Discounts.
-- It calculates an effective APR for the discount.
-- **Logic**: If `APR > 10% (Hurdle Rate)`, it suggests paying early.
-- **Dashboard**: View the **Optimization** tab to see "Potential Savings" and cash flow forecasts.
+1. Select **ERP System** (QuickBooks, Xero, NetSuite).
+2. Enter credentials.
+3. **Mock Mode**: Enter `mock` in credential fields to simulate a connection for testing.
 
-### 4. Autonomous Outreach (Simulated)
+**Workflow:**
+* Connect to ERP.
+* Process an invoice.
+* Click **Export to [ERP Name]** to create a Bill/VendorBill automatically.
 
-- If a discrepancy is found (e.g. missing receipt), the agent simulates sending an email (`outreach_sent`) to the vendor.
-- Can be configured to send real emails via SMTP (see configuration below).
+### 📥 Automated Ingestion
 
----
-
-## Configuration
-
-### Autonomous Outreach
-
-To enable real email sending for outreach actions, add these to `.env`:
-
-```bash
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your_email@example.com
-SMTP_PASSWORD=your_password
-```
-
-### Database
-
-The app uses a local SQLite database (`invoice_app.db`) to simulate an ERP environment.
-
-**Models:**
-
-- **Vendor**: Stores validated vendors, addresses, and `default_payment_terms`.
-- **PurchaseOrder**: Tracks expected amounts, tolerances, and `GoodsReceipt` history.
-- **Invoice**: Persists extracted invoice data, including `payment_terms`, `optimal_payment_date`, and `potential_savings`.
-- **GoodsReceipt**: Records actual items received for 3-way matching.
-
-**Integration:**
-
-- The agent interacts with the DB via SQLAlchemy ORM.
-- **Validation**: Agent queries `Vendor` table to validate incoming names.
-- **Persistence**: Approved invoices are automatically saved to the `Invoice` table with full extraction results.
+The background service `ingestion_service.py` enables "Touchless AP".
+* **Watch Folder**: `./inbox`
+* **Actions**:
+  * Detect new file -> Run AI Agent -> Validate -> Save to DB -> Move to `./processed`.
+  * On Failure -> Move to `./failed`.
 
 ---
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────┐       ┌──────────────────────────────┐
-│ Streamlit Frontend  │ <---> │      Invoice Agent (Backend) │
-│ (Dash, POs, Opt)    │       │     (Claude Opus + Tools)    │
+│  Streamlit Web UI   │ <---> │      Invoice Agent (Core)    │
+│ (Dash, Chat, ERP)   │       │     (Claude Opus + Tools)    │
 └──────────┬──────────┘       └──────────────┬───────────────┘
            │                                 │
            ▼                                 ▼
@@ -136,7 +114,13 @@ The app uses a local SQLite database (`invoice_app.db`) to simulate an ERP envir
 └─────────────────────┘       │ • perform_3_way_match        │
                               │ • optimize_payment           │
                               │ • resolve_discrepancy        │
-                              └──────────────────────────────┘
+                              └──────────────┬───────────────┘
+                                             │
+                                             ▼
+                                  ┌──────────────────────┐
+                                  │    ERP Connectors    │
+                                  │ (QB, Xero, NetSuite) │
+                                  └──────────────────────┘
 ```
 
 ---
@@ -147,22 +131,14 @@ The app uses a local SQLite database (`invoice_app.db`) to simulate an ERP envir
 | :--- | :--- |
 | **Data Extraction** | ✅ Live |
 | **Vendor Validation** | ✅ Live |
-| **Database Integration** | ✅ Live |
-| **2-Way Matching** | ✅ Live |
 | **3-Way Matching** | ✅ Live v2.0 |
 | **Payment Optimization** | ✅ Live v2.0 |
 | **Autonomous Outreach** | ✅ Live (Simulated) |
-| **ERP Connectors (SAP/Oracle)** | 🚧 Planned |
+| **Automated Ingestion** | ✅ Live v3.0 |
+| **Agentic Spend QA** | ✅ Live v3.0 |
+| **ERP Connectors (QB/Xero/NetSuite)** | ✅ Live v3.0 |
 | **Multi-Currency** | 🚧 Planned |
 
 ---
 
-## Troubleshooting
-
-- **Database Errors**: Delete `invoice_app.db` and restart `app.py` to re-seed fresh data.
-- **PDF Errors**: Ensure `poppler-utils` is installed.
-- **Optimization Not Working**: Ensure the Vendor has "Default Terms" set or the invoice contains clear terms like "Net 30".
-
----
-
-**Zillion Technologies** - Enterprise InvoiceAI v2.0
+**Zillion Technologies** - *Thought beyond the DOT*

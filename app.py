@@ -10,6 +10,8 @@ import tempfile
 from invoice_agent import process_invoice
 import pandas as pd
 from quickbooks_manager import QuickBooksManager
+from xero_manager import XeroManager
+from netsuite_manager import NetSuiteManager
 import os
 from dotenv import load_dotenv
 from database import engine, SessionLocal, Base
@@ -168,40 +170,91 @@ st.markdown("""
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
     
-    # QuickBooks Integration
-    with st.expander("QuickBooks Connection", expanded=False):
-        qb_client_id = st.text_input("Client ID", value=os.getenv("AB_CLIENT_ID", ""), type="password")
-        qb_client_secret = st.text_input("Client Secret", value=os.getenv("AB_CLIENT_SECRET", ""), type="password")
-        qb_redirect_uri = st.text_input("Redirect URI", value=os.getenv("AB_REDIRECT_URI", "http://localhost:8501"))
+    # ERP Integration
+    erp_system = st.selectbox("ERP System", ["QuickBooks Online", "Xero", "NetSuite"], index=0)
+    
+    with st.expander(f"{erp_system} Connection", expanded=False):
         
-        # Initialize Manager
-        if "qb_manager" not in st.session_state and qb_client_id and qb_client_secret:
-            st.session_state.qb_manager = QuickBooksManager(
-                client_id=qb_client_id,
-                client_secret=qb_client_secret,
-                redirect_uri=qb_redirect_uri
-            )
-        
-        # Connection Logic
-        if "qb_manager" in st.session_state:
-            manager = st.session_state.qb_manager
+        # ------------------ QUICKBOOKS ------------------
+        if erp_system == "QuickBooks Online":
+            qb_client_id = st.text_input("QB Client ID", value=os.getenv("AB_CLIENT_ID", ""), type="password")
+            qb_client_secret = st.text_input("QB Client Secret", value=os.getenv("AB_CLIENT_SECRET", ""), type="password")
+            qb_redirect = st.text_input("Redirect URI", value=os.getenv("AB_REDIRECT_URI", "http://localhost:8501"))
             
-            # Auth Callback
-            query_params = st.query_params
-            if "code" in query_params and "realmId" in query_params:
-                try:
-                    manager.handle_callback(query_params["code"], query_params["realmId"])
-                    st.success("Linked to QuickBooks")
-                except Exception:
-                    st.error("Connection Failed")
+            if "qb_manager" not in st.session_state and qb_client_id and qb_client_secret:
+                is_mock = (qb_client_id.lower() == "mock")
+                st.session_state.qb_manager = QuickBooksManager(qb_client_id, qb_client_secret, qb_redirect, mock_mode=is_mock)
+                st.session_state.active_erp = "qb_manager"
+
+            if "qb_manager" in st.session_state:
+                mgr = st.session_state.qb_manager
+                # Auth Callback
+                qp = st.query_params
+                if "code" in qp and "realmId" in qp and not mgr.is_connected():
+                    try:
+                        mgr.handle_callback(qp["code"], qp["realmId"])
+                        st.success("Linked QB")
+                    except: pass
+                
+                if mgr.is_connected():
+                    st.success("🟢 Connected (Mock)" if mgr.mock_mode else "🟢 Connected")
+                    if st.button("Disconnect QB"):
+                        del st.session_state.qb_manager
+                        st.rerun()
+                else:
+                    if getattr(mgr, 'mock_mode', False):
+                        if st.button("Simulate QB Connect"):
+                            mgr.handle_callback("mock", "mock")
+                            st.rerun()
+                    else:
+                        st.link_button("Login to Intuit", mgr.get_auth_url())
+
+        # ------------------ XERO ------------------
+        elif erp_system == "Xero":
+            x_client_id = st.text_input("Xero Client ID", value="mock", type="password")
+            x_client_secret = st.text_input("Xero Secret", value="mock", type="password")
             
-            if manager.is_connected():
-                st.success("🟢 Active")
-            else:
-                if st.button("Connect"):
-                    st.link_button("Login to Intuit", manager.get_auth_url())
-        else:
-            st.info("Enter credentials to enable QB export.")
+            if "xero_manager" not in st.session_state and x_client_id:
+                is_mock = (x_client_id.lower() == "mock")
+                st.session_state.xero_manager = XeroManager(x_client_id, x_client_secret, "http://localhost:8501", mock_mode=is_mock)
+                st.session_state.active_erp = "xero_manager"
+
+            if "xero_manager" in st.session_state:
+                mgr = st.session_state.xero_manager
+                if mgr.is_connected():
+                    st.success("🟢 Connected (Mock)" if mgr.mock_mode else "🟢 Connected")
+                    if st.button("Disconnect Xero"):
+                        del st.session_state.xero_manager
+                        st.rerun()
+                else:
+                    if getattr(mgr, 'mock_mode', False):
+                        if st.button("Simulate Xero Connect"):
+                            mgr.handle_callback("mock")
+                            st.rerun()
+
+        # ------------------ NETSUITE ------------------
+        elif erp_system == "NetSuite":
+            ns_account = st.text_input("Account ID", value="mock")
+            ns_key = st.text_input("Consumer Key", value="mock", type="password")
+            
+            if "ns_manager" not in st.session_state and ns_account:
+                is_mock = (ns_account.lower() == "mock")
+                st.session_state.ns_manager = NetSuiteManager(ns_account, ns_key, "s", "t", "s", mock_mode=is_mock)
+                st.session_state.active_erp = "ns_manager"
+
+            if "ns_manager" in st.session_state:
+                mgr = st.session_state.ns_manager
+                if mgr.is_connected():
+                    st.success("🟢 Connected (Mock)" if mgr.mock_mode else "🟢 Connected")
+                    if st.button("Disconnect NetSuite"):
+                        del st.session_state.ns_manager
+                        st.rerun()
+                else:
+                    if st.button("Test Connection"):
+                        if mgr.connect():
+                            st.rerun()
+                        else:
+                            st.error("Connection Failed")
 
     st.divider()
     # Logo Area
@@ -217,7 +270,7 @@ with st.sidebar:
     
     page = st.radio(
         "Go to",
-        ["Dashboard", "Vendors", "Purchase Orders", "Optimization", "History", "Analytics"],
+        ["Dashboard", "Vendors", "Purchase Orders", "Optimization", "AI Assistant", "History", "Analytics"],
         index=0,
         label_visibility="collapsed"
     )
@@ -269,6 +322,10 @@ elif page == "Purchase Orders":
 elif page == "Optimization":
     from pages_ui.optimization import render_optimization_page
     render_optimization_page()
+
+elif page == "AI Assistant":
+    from pages_ui.chat import render as render_chat_page
+    render_chat_page()
 
 elif page == "History":
     from pages_ui.history import render_history_page
@@ -407,12 +464,24 @@ else:
 
             # 2. Validation & Anomalies Logic
             validations = result.get("validation_results", result.get("validations", {}))
+            if not isinstance(validations, dict):
+                 validations = {}
+            
             anomalies = result.get("anomalies", [])
             
-            if anomalies or not validations.get("vendor_validation", {}).get("valid"):
+            # Helper to safely get nested validation
+            def get_val_status(key):
+                v = validations.get(key, {})
+                if isinstance(v, dict):
+                    return v.get("valid", True)
+                return True # Default to valid if malformed
+
+            if anomalies or not get_val_status("vendor_validation"):
                 with st.expander("⚠️ Validation Issues Detected", expanded=True):
-                    if not validations.get("vendor_validation", {}).get("valid", True):
-                         st.warning(f"Vendor Issue: {validations.get('vendor_validation', {}).get('message')}")
+                    if not get_val_status("vendor_validation"):
+                         v_val = validations.get('vendor_validation', {})
+                         msg = v_val.get('message') if isinstance(v_val, dict) else str(v_val)
+                         st.warning(f"Vendor Issue: {msg}")
                     
                     for a in anomalies:
                         st.error(f"{a.get('type')}: {a.get('description')}")
@@ -456,18 +525,25 @@ else:
             # 4. Action Bar
             ac1, ac2 = st.columns(2)
             with ac1:
-                if "qb_manager" in st.session_state and st.session_state.qb_manager.is_connected():
-                    if st.button("📤 Export to QuickBooks", type="primary", use_container_width=True):
+                active_erp_key = st.session_state.get("active_erp")
+                manager = st.session_state.get(active_erp_key) if active_erp_key else None
+                
+                if manager and manager.is_connected():
+                    # Determine ERP Name for label
+                    erp_label = "ERP"
+                    if isinstance(manager, QuickBooksManager): erp_label = "QuickBooks"
+                    elif isinstance(manager, XeroManager): erp_label = "Xero"
+                    elif isinstance(manager, NetSuiteManager): erp_label = "NetSuite"
+
+                    if st.button(f"📤 Export to {erp_label}", type="primary", use_container_width=True):
                         try:
-                            # In a real app, we would push 'edited_df' back to the QB manager
-                            # For now, pushing the original extraction
-                            msg = st.session_state.qb_manager.create_bill(extracted)
+                            msg = manager.create_bill(extracted)
                             st.balloons()
                             st.toast(msg, icon="✅")
                         except Exception as e:
                             st.error(f"Export Error: {e}")
                 else:
-                     st.button("Export to QuickBooks", disabled=True, use_container_width=True, help="Connect in Settings")
+                     st.button("Export to ERP", disabled=True, use_container_width=True, help="Connect an ERP in Settings")
             
             with ac2:
                 st.download_button(

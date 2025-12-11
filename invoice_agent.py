@@ -48,7 +48,10 @@ from sqlalchemy import or_
 
 def validate_vendor(vendor_name: str) -> dict:
     """Check if vendor exists in database"""
-    vendor_clean = vendor_name.strip()
+    if isinstance(vendor_name, dict):
+         vendor_name = vendor_name.get("value") or vendor_name.get("name") or str(vendor_name)
+         
+    vendor_clean = str(vendor_name).strip()
     db = SessionLocal()
     try:
         # 1. Exact Name Match (Case Insensitive)
@@ -717,10 +720,14 @@ def save_invoice_to_db(data: dict) -> dict:
         vendor_name = extracted.get("vendor_name")
         vendor_id = None
         if vendor_name:
-            # Try to find vendor
-            v = db.query(Vendor).filter(Vendor.name.ilike(vendor_name.strip())).first()
-            if v:
-                vendor_id = v.id
+            if isinstance(vendor_name, dict):
+                vendor_name = vendor_name.get("value") or vendor_name.get("name") or str(vendor_name)
+            
+            if isinstance(vendor_name, str):
+                # Try to find vendor
+                v = db.query(Vendor).filter(Vendor.name.ilike(vendor_name.strip())).first()
+                if v:
+                    vendor_id = v.id
         
         # Parse Amount
         try:
