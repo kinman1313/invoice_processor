@@ -41,7 +41,7 @@ DEFAULT_MODEL = os.getenv('INVOICE_MODEL', 'claude-opus-4-1-20250805')
 MAX_TOKENS = int(os.getenv('MAX_TOKENS', '2048'))
 
 from database import SessionLocal
-from models import Vendor, PurchaseOrder
+from models import Vendor, PurchaseOrder, Invoice, InvoiceLine
 from sqlalchemy import or_
 
 
@@ -471,26 +471,17 @@ Flag anything unusual for human review."""
                 break
         
         # Parse final result if not already done
-        if final_result is None:
-            # Try to extract from last message
-            for block in response.content:
-                if hasattr(block, 'text'):
-                    try:
-                        json_match = re.search(r'\{[\s\S]*\}', block.text)
-                        if json_match:
-                            final_result = json.loads(json_match.group())
-                    except json.JSONDecodeError:
-                        pass
-            
             if final_result is None:
                 final_result = {
                     "success": False,
                     "error": "Could not extract structured result from agent"
                 }
-        
         # Add success indicator
         if "success" not in final_result:
             final_result["success"] = True
+            
+        # SAVE TO DB
+        final_result = save_invoice_to_db(final_result)
         
         return final_result
         
@@ -506,6 +497,70 @@ Flag anything unusual for human review."""
                 Path(actual_path).unlink()
             except Exception:
                 pass
+
+
+def save_invoice_to_db(data: dict) -> dict:
+    """Save processed invoice data to database"""
+    # Import locally to avoid circular imports if any, or just for safety
+    from models import Vendor, PurchaseOrder, Invoice, InvoiceLine
+    
+    db = SessionLocal()
+    try:
+        # Extract fields
+        extracted = data.get("extraction_results", data.get("extracted_data", {}))
+        if not extracted:
+            return data
+            
+        # Get/Find Vendor
+        vendor_name = extracted.get("vendor_name")
+        vendor_id = None
+        if vendor_name:
+            # Try to find vendor
+            v = db.query(Vendor).filter(Vendor.name.ilike(vendor_name.strip())).first()
+            if v:
+                vendor_id = v.id
+        
+        # Parse Amount
+        try:
+            amt = float(extracted.get("total_amount", 0))
+        except:
+            amt = 0.0
+            
+        # Create Invoice Record
+        new_inv = Invoice(
+            invoice_number=extracted.get("invoice_number"),
+            vendor_id=vendor_id,
+            date=extracted.get("invoice_date"),
+            total_amount=amt,
+            status="processed", # Default status
+            extracted_data=data
+        )
+        db.add(new_inv)
+        db.flush() # Get ID
+        
+        # Save Line Items
+        lines = extracted.get("line_items", [])
+        for line in lines:
+            inv_line = InvoiceLine(
+                invoice_id=new_inv.id,
+                description=line.get("description", ""),
+                quantity=float(line.get("quantity", 0) or 0),
+                unit_price=float(line.get("unit_price", 0) or 0),
+                total=float(line.get("total", 0) or 0)
+            )
+            db.add(inv_line)
+            
+        db.commit()
+        data["db_saved"] = True
+        data["invoice_db_id"] = new_inv.id
+        return data
+        
+    except Exception as e:
+        print(f"Error saving to DB: {e}")
+        data["db_error"] = str(e)
+        return data
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":

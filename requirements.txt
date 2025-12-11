@@ -7,4 +7,4 @@ pdf2image
 python-docx
 python-quickbooks
 intuit-oauth
-SQLAlchemy==2.0.25
+SQLAlchemy>=2.0.36

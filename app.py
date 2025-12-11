@@ -68,7 +68,14 @@ st.markdown("""
 <style>
     /* Global Clean Font */
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Outfit', 'Inter', sans-serif;
+    }
+    
+    /* Brand Colors */
+    :root {
+        --primary-blue: #2c3e50;
+        --accent-red: #e74c3c;
+        --bg-color: #f8f9fa;
     }
     
     /* Navbar / Header */
@@ -76,79 +83,89 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 1rem 0;
-        border-bottom: 1px solid #e0e0e0;
+        padding: 1.5rem;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         margin-bottom: 2rem;
     }
     
     .logo-text {
-        font-weight: 700;
-        font-size: 1.5rem;
-        color: #1a1a1a;
-        background: -webkit-linear-gradient(45deg, #0984e3, #6c5ce7);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        font-size: 1.8rem;
+        color: var(--primary-blue);
+        letter-spacing: -0.5px;
+    }
+    
+    .tagline {
+        font-size: 0.9rem;
+        color: #7f8c8d;
     }
 
     /* Cards */
     .metric-container {
         background-color: white;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        border: 1px solid #f0f0f0;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.04);
+        border: 1px solid #edf2f7;
         text-align: center;
+        transition: transform 0.2s ease;
+    }
+    
+    .metric-container:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.08);
     }
     
     .metric-label {
-        color: #636e72;
-        font-size: 0.8rem;
+        color: #95a5a6;
+        font-size: 0.75rem;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        margin-bottom: 0.5rem;
     }
     
     .metric-value {
-        color: #2d3436;
-        font-size: 1.5rem;
+        color: var(--primary-blue);
+        font-size: 2rem;
         font-weight: 700;
     }
 
-    /* Buttons */
+    /* Custom Buttons - Red Accent */
     .stButton > button {
-        border-radius: 6px;
-        font-weight: 600;
-    }
-    
-    /* Sidebar Cleanup */
-    .sidebar-content {
-        padding: 1rem;
-    }
-    
-    /* Split View Containers */
-    .document-viewer {
-        background: #fafafa;
-        border: 1px solid #eee;
         border-radius: 8px;
+        font-weight: 600;
+        border: none;
+        transition: all 0.2s;
+    }
+    
+    div[data-testid="stButton"] > button[kind="primary"] {
+        background-color: var(--accent-red);
+    }
+    
+    div[data-testid="stButton"] > button[kind="primary"]:hover {
+        background-color: #c0392b;
+    }
+    
+    /* Document Viewer */
+    .document-viewer {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
         height: 80vh;
         overflow-y: auto;
-    }
-    
-    .data-editor-container {
-        padding: 0 1rem;
+        padding: 1rem;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
     }
 </style>
 """, unsafe_allow_html=True)
 
-
 # -----------------------------------------------------------------------------
-# Sidebar: Navigation & Settings
+# Sidebar: Settings
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🧭 Navigation")
-    page = st.radio("Go to", ["Dashboard", "Vendors", "Purchase Orders"], label_visibility="collapsed")
-    
-    st.divider()
-    
     st.markdown("### ⚙️ Settings")
     
     # QuickBooks Integration
@@ -187,8 +204,24 @@ with st.sidebar:
             st.info("Enter credentials to enable QB export.")
 
     st.divider()
+    # Logo Area
+    if os.path.exists("assets/logo.png"):
+        st.image("assets/logo.png", use_container_width=True)
+    else:
+        st.markdown("## ⚡ InvoiceAI")
+        
+    st.write("") # Spacer
+    st.write("") 
     
-    st.markdown("### ℹ️ About")
+    st.markdown("### 🧭 Navigation")
+    
+    page = st.radio(
+        "Go to",
+        ["Dashboard", "Vendors", "Purchase Orders", "History", "Analytics"],
+        index=0,
+        label_visibility="collapsed"
+    )
+
     st.caption("Enterprise InvoiceAI v2.0")
     st.caption("Zillion Technologies")
 
@@ -198,8 +231,13 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 st.markdown("""
     <div class="saas-header">
-        <div class="logo-text">⚡ InvoiceAI Enterprise</div>
-        <div>Workspace: <b>Default</b></div>
+        <div>
+            <div class="logo-text">Zillion InvoiceAI</div>
+            <div class="tagline">Thought beyond the DOT</div>
+        </div>
+        <div style="background:#eef2f7; padding:0.5rem 1rem; border-radius:20px; color:#2c3e50; font-weight:600; font-size:0.9rem;">
+            Workspace: <b>Default</b>
+        </div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -225,9 +263,16 @@ if page == "Vendors":
     render_vendors_page()
 
 elif page == "Purchase Orders":
-    st.title("📦 Purchase Orders")
-    st.info("Purchase Order management coming soon.")
-    # Placeholder for PO page
+    from pages_ui.pos import render_pos_page
+    render_pos_page()
+
+elif page == "History":
+    from pages_ui.history import render_history_page
+    render_history_page()
+
+elif page == "Analytics":
+    from pages_ui.analytics import render_analytics_page
+    render_analytics_page()
 
 else:
     # -----------------------------------------------------------------------------
@@ -341,10 +386,16 @@ else:
             </div>
             """, unsafe_allow_html=True)
             
+            try:
+                val = float(total_amt)
+                fmt_total = f"{val:,.2f}"
+            except (ValueError, TypeError):
+                fmt_total = "0.00"
+
             m3.markdown(f"""
             <div class="metric-container">
                 <div class="metric-label">Total</div>
-                <div class="metric-value">${float(total_amt):,.2f}</div>
+                <div class="metric-value">${fmt_total}</div>
             </div>
             """, unsafe_allow_html=True)
             
