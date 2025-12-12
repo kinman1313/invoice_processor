@@ -1,8 +1,8 @@
-# Invoice Processing Agent - Strategic Intelligence Edition v3.0
+# Agent - Z (Strategic Intelligence Edition v3.0)
 
 ## Overview
 
-**Invoice Processing Agent** is an enterprise-grade AI system that transforms Accounts Payable from a back-office function into a strategic asset.
+**Agent - Z** is an enterprise-grade AI system that transforms Accounts Payable from a back-office function into a strategic asset.
 
 It combines **Agentic AI** with **Strategic Intelligence** to automate the entire lifecycle—from zero-click ingestion to ERP export—while providing real-time financial insights via natural language chat.
 
@@ -70,6 +70,7 @@ python ingestion_service.py
 ### 🧠 Agentic Spend QA (Chat)
 
 Located in the **AI Assistant** tab.
+
 * **Natural Language SQL**: Converts English questions into secure database queries.
 * **Context Aware**: Remembers your previous questions for a conversational experience.
 * **Safety**: Uses a read-only connection to ensure data integrity.
@@ -85,6 +86,7 @@ Integrate with major ERP systems via the **Settings** sidebar.
 3. **Mock Mode**: Enter `mock` in credential fields to simulate a connection for testing.
 
 **Workflow:**
+
 * Connect to ERP.
 * Process an invoice.
 * Click **Export to [ERP Name]** to create a Bill/VendorBill automatically.
@@ -92,6 +94,7 @@ Integrate with major ERP systems via the **Settings** sidebar.
 ### 📥 Automated Ingestion
 
 The background service `ingestion_service.py` enables "Touchless AP".
+
 * **Watch Folder**: `./inbox`
 * **Actions**:
   * Detect new file -> Run AI Agent -> Validate -> Save to DB -> Move to `./processed`.

@@ -261,7 +261,7 @@ with st.sidebar:
     if os.path.exists("assets/logo.png"):
         st.image("assets/logo.png", use_container_width=True)
     else:
-        st.markdown("## ⚡ InvoiceAI")
+        st.markdown("## ⚡ Agent - Z")
         
     st.write("") # Spacer
     st.write("") 
@@ -270,13 +270,13 @@ with st.sidebar:
     
     page = st.radio(
         "Go to",
-        ["Dashboard", "Vendors", "Purchase Orders", "Optimization", "AI Assistant", "History", "Analytics"],
+        ["Dashboard", "Review Queue", "Nerve Center", "Vendors", "Purchase Orders", "Optimization", "AI Assistant", "History", "Analytics"],
         index=0,
         label_visibility="collapsed"
     )
 
-    st.caption("Enterprise InvoiceAI v2.0")
-    st.caption("Zillion Technologies")
+    st.caption("Agent - Z v3.0")
+    st.caption("Powered by Zillion")
 
 
 # -----------------------------------------------------------------------------
@@ -285,8 +285,8 @@ with st.sidebar:
 st.markdown("""
     <div class="saas-header">
         <div>
-            <div class="logo-text">Zillion InvoiceAI</div>
-            <div class="tagline">Thought beyond the DOT</div>
+            <div class="logo-text">Agent - Z</div>
+            <div class="tagline">Strategic Financial Intelligence</div>
         </div>
         <div style="background:#eef2f7; padding:0.5rem 1rem; border-radius:20px; color:#2c3e50; font-weight:600; font-size:0.9rem;">
             Workspace: <b>Default</b>
@@ -311,7 +311,15 @@ def reset_state():
 # Routing
 # -----------------------------------------------------------------------------
 
-if page == "Vendors":
+if page == "Review Queue":
+    import pages_ui.review as review_page
+    review_page.render()
+
+elif page == "Nerve Center":
+    import pages_ui.knowledge_graph as kg_page
+    kg_page.render()
+
+elif page == "Vendors":
     from pages_ui.vendors import render_vendors_page
     render_vendors_page()
 

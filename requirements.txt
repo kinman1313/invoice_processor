@@ -8,4 +8,5 @@ python-docx
 python-quickbooks
 intuit-oauth
 SQLAlchemy>=2.0.36
-watchdog>=4.0.0
+watchdog
+streamlit-agraph>=4.0.0
